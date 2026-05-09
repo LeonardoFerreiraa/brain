@@ -1,9 +1,9 @@
-import { app, BrowserWindow, session } from 'electron'
+import { app, BrowserWindow, session, nativeTheme, ipcMain } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { registerIpcHandlers } from './ipc/fileSystem'
-import { registerConfigHandlers, readConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
+import { registerConfigHandlers, readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
@@ -78,6 +78,26 @@ app.on('window-all-closed', () => {
 
 let cachedConfig: Config | null = null
 
+// Single instance lock
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+
+app.on('second-instance', (_event, argv) => {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+    // Forward file path arg to renderer
+    const filePath = argv.find(
+      a => a.endsWith('.md') || a.endsWith('.excalidraw')
+    )
+    if (filePath) {
+      win.webContents.send('open-file', filePath)
+    }
+  }
+})
+
 app.on('activate', async () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
@@ -103,5 +123,26 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   registerConfigHandlers()
   cachedConfig = await readConfig()
+
+  // Theme: sync nativeTheme with config
+  const config = await readConfig()
+  nativeTheme.themeSource = config.theme === 'system' ? 'system' : config.theme
+
+  nativeTheme.on('updated', () => {
+    if (win) {
+      win.webContents.send('theme:changed', nativeTheme.shouldUseDarkColors)
+    }
+  })
+
   createWindow(cachedConfig)
+
+  // Theme IPC handlers
+  ipcMain.handle('theme:get-system-dark', () => nativeTheme.shouldUseDarkColors)
+
+  ipcMain.handle('theme:set', async (_e, setting: string) => {
+    if (setting === 'system' || setting === 'light' || setting === 'dark') {
+      nativeTheme.themeSource = setting
+      await mergeConfig({ theme: setting as 'system' | 'light' | 'dark' })
+    }
+  })
 })
