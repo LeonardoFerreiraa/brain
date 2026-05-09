@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { registerIpcHandlers } from './ipc/fileSystem'
+import { registerConfigHandlers, readConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
@@ -28,7 +29,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
-function createWindow() {
+function createWindow(config: Config) {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
@@ -38,6 +39,14 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
     },
+  })
+
+  // Restore window bounds
+  applyWindowBounds(win, config.window)
+
+  // Save bounds on close
+  win.on('close', () => {
+    if (win) saveWindowBounds(win)
   })
 
   // Test active push message to Renderer-process.
@@ -67,15 +76,18 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('activate', () => {
+let cachedConfig: Config | null = null
+
+app.on('activate', async () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
+    const config = cachedConfig || (await readConfig())
+    createWindow(config)
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Security: Set Content Security Policy header
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -89,5 +101,7 @@ app.whenReady().then(() => {
   })
 
   registerIpcHandlers()
-  createWindow()
+  registerConfigHandlers()
+  cachedConfig = await readConfig()
+  createWindow(cachedConfig)
 })
