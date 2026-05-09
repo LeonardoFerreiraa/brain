@@ -1,7 +1,8 @@
-import { ipcMain, dialog, shell } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import { recordWrite } from '../watcher'
 
 // Config for path validation
 let rootFolder: string | null = null
@@ -47,6 +48,7 @@ export function registerIpcHandlers() {
       await fs.writeFile(tmpPath, content, 'utf-8')
       await fs.rename(tmpPath, resolved)
       const stat = await fs.stat(resolved)
+      recordWrite(resolved, stat.mtimeMs)
       return { ok: true, mtime: stat.mtimeMs }
     } catch (err) {
       const error = err as NodeJS.ErrnoException
@@ -110,6 +112,15 @@ export function registerIpcHandlers() {
     }
   })
 
+  // fs:watch-start
+  ipcMain.handle('fs:watch-start', async (_e, { path: watchPath }) => {
+    const { startWatcher } = await import('../watcher')
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    if (win) {
+      startWatcher(watchPath, win)
+    }
+    return { ok: true }
+  })
+
   // config:get and config:set are handled in config module (see issue #4)
-  // fs:watch-start is handled in watcher module (see issue #8)
 }
