@@ -2,6 +2,7 @@ import { app, BrowserWindow, session } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { registerIpcHandlers } from './ipc/fileSystem'
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
@@ -87,5 +88,6 @@ app.whenReady().then(() => {
     })
   })
 
+  registerIpcHandlers()
   createWindow()
 })
