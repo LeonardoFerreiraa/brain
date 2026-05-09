@@ -78,6 +78,26 @@ app.on('window-all-closed', () => {
 
 let cachedConfig: Config | null = null
 
+// Single instance lock
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+}
+
+app.on('second-instance', (_event, argv) => {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+    // Forward file path arg to renderer
+    const filePath = argv.find(
+      a => a.endsWith('.md') || a.endsWith('.excalidraw')
+    )
+    if (filePath) {
+      win.webContents.send('open-file', filePath)
+    }
+  }
+})
+
 app.on('activate', async () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
