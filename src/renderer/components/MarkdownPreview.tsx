@@ -1,9 +1,14 @@
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { useAppStore } from '../store/useAppStore'
 import type { Components } from 'react-markdown'
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
+
+function wikilinkUrlTransform(url: string): string {
+  if (url.startsWith('wikilink:')) return url
+  return defaultUrlTransform(url)
+}
 
 // Wikilink regex: [[name]] or [[name|alias]]
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g
@@ -142,12 +147,13 @@ export function MarkdownPreview({ content, isDark = false }: MarkdownPreviewProp
   }
 
   return (
-    <div className={`flex-1 overflow-auto p-4 ${isDark ? 'dark' : ''}`}>
+    <div data-testid="markdown-preview" className={`flex-1 overflow-auto p-4 ${isDark ? 'dark' : ''}`}>
       <div className="prose dark:prose-invert max-w-none">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkWikilinks]}
           rehypePlugins={[rehypeHighlight]}
           components={{ a: CustomLink }}
+          urlTransform={wikilinkUrlTransform}
         >
           {processed}
         </ReactMarkdown>
