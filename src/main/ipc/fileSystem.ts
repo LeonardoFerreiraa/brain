@@ -42,15 +42,18 @@ export function registerIpcHandlers() {
 
   // fs:write-file (atomic write via tmp file)
   ipcMain.handle('fs:write-file', async (_e, { path: filePath, content }) => {
+    let tmpPath: string | undefined
     try {
       const resolved = await resolveAndValidate(filePath)
-      const tmpPath = resolved + '.tmp'
+      tmpPath = resolved + '.tmp'
       await fs.writeFile(tmpPath, content, 'utf-8')
       await fs.rename(tmpPath, resolved)
+      tmpPath = undefined // rename succeeded; no cleanup needed
       const stat = await fs.stat(resolved)
       recordWrite(resolved, stat.mtimeMs)
       return { ok: true, mtime: stat.mtimeMs }
     } catch (err) {
+      if (tmpPath) await fs.unlink(tmpPath).catch(() => {})
       const error = err as NodeJS.ErrnoException
       return { ok: false, code: error.code ?? 'UNKNOWN', message: error.message }
     }

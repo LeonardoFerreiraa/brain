@@ -38,4 +38,13 @@ describe('atomic write temp path', () => {
     expect(tmpPath).toBe('/home/user/Brain/note.md.tmp')
     expect(tmpPath.endsWith('.tmp')).toBe(true)
   })
+
+  // BUG-02: tmp path must be in same dir as target so cleanup is unambiguous
+  it('tmp path is in same directory as target', () => {
+    const filePath = '/home/user/Brain/sub/note.md'
+    const tmpPath = atomicTmpPath(filePath)
+    const targetDir = filePath.substring(0, filePath.lastIndexOf('/'))
+    const tmpDir = tmpPath.substring(0, tmpPath.lastIndexOf('/'))
+    expect(tmpDir).toBe(targetDir)
+  })
 })
