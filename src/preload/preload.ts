@@ -28,16 +28,19 @@ const api = {
     return () => ipcRenderer.off('fs:tree-changed', callback)
   },
   onTreeEntry: (callback: (batch: unknown[]) => void) => {
-    ipcRenderer.on('fs:tree-entry', (_e, data) => callback(data))
-    return () => ipcRenderer.off('fs:tree-entry', callback)
+    const wrapper = (_e: Electron.IpcRendererEvent, data: unknown[]) => callback(data)
+    ipcRenderer.on('fs:tree-entry', wrapper)
+    return () => ipcRenderer.off('fs:tree-entry', wrapper)
   },
   onFileChanged: (callback: (data: { path: string; mtime: number }) => void) => {
-    ipcRenderer.on('fs:file-changed', (_e, data) => callback(data))
-    return () => ipcRenderer.off('fs:file-changed', callback)
+    const wrapper = (_e: Electron.IpcRendererEvent, data: { path: string; mtime: number }) => callback(data)
+    ipcRenderer.on('fs:file-changed', wrapper)
+    return () => ipcRenderer.off('fs:file-changed', wrapper)
   },
   onFileDeleted: (callback: (data: { path: string }) => void) => {
-    ipcRenderer.on('fs:file-deleted', (_e, data) => callback(data))
-    return () => ipcRenderer.off('fs:file-deleted', callback)
+    const wrapper = (_e: Electron.IpcRendererEvent, data: { path: string }) => callback(data)
+    ipcRenderer.on('fs:file-deleted', wrapper)
+    return () => ipcRenderer.off('fs:file-deleted', wrapper)
   },
   onOpenFile: (callback: (filePath: string) => void) => {
     ipcRenderer.on('open-file', (_e, filePath) => callback(filePath))
