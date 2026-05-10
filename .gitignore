@@ -28,4 +28,9 @@ dist-electron
 # Project specific
 prd.md
 bugs.md
+test-cases.md
+
+# Playwright
+playwright-report/
+test-results/
 
