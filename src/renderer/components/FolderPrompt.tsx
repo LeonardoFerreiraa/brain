@@ -46,8 +46,10 @@ export function FolderPrompt({ onClose }: FolderPromptProps) {
       setPendingConfirm(true)
       return
     }
-    await window.api.setConfig({ rootFolder: inputPath })
-    setRootFolder(inputPath)
+    // BUG-18: tilde expansion handled in main process config:set handler
+    const result = await window.api.setConfig({ rootFolder: inputPath }) as { rootFolder?: string }
+    const savedPath = result?.rootFolder ?? inputPath
+    setRootFolder(savedPath)
     setWarning(null)
     setPendingConfirm(false)
     onClose?.()

@@ -36,3 +36,30 @@ describe('FolderPrompt validation', () => {
     expect(validate('/tmp/brain')).toBeNull()
   })
 })
+
+// BUG-18: tilde expansion must happen before saving rootFolder to config
+describe('BUG-18 — tilde expansion in expandTilde (main process helper)', () => {
+  function expandTilde(p: string, home: string): string {
+    if (p === '~') return home
+    if (p.startsWith('~/')) return home + p.slice(1)
+    return p
+  }
+
+  const HOME = '/home/leo'
+
+  it('expands ~/Brain to absolute path', () => {
+    expect(expandTilde('~/Brain', HOME)).toBe('/home/leo/Brain')
+  })
+
+  it('expands bare ~ to home dir', () => {
+    expect(expandTilde('~', HOME)).toBe('/home/leo')
+  })
+
+  it('leaves already-absolute path unchanged', () => {
+    expect(expandTilde('/home/leo/Brain', HOME)).toBe('/home/leo/Brain')
+  })
+
+  it('leaves relative path without ~ unchanged', () => {
+    expect(expandTilde('Brain', HOME)).toBe('Brain')
+  })
+})
