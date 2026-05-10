@@ -6,6 +6,9 @@ import { registerIpcHandlers, setRootFolder } from './ipc/fileSystem'
 import { registerConfigHandlers } from './ipc/config'
 import { readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
 
+// Prevent white screen on Linux systems with unsupported GPU buffer formats
+app.disableHardwareAcceleration()
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
