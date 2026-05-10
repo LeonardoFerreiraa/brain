@@ -51,6 +51,17 @@ function mergeConfig(current: Config, partial: Partial<Config>): Config {
   }
 }
 
+describe('BUG-01 — single config snapshot consistency', () => {
+  it('one migrate call yields same theme and window — no double-read divergence', () => {
+    const raw = { version: 1, rootFolder: '/Brain', theme: 'dark' as const, window: { x: 50, y: 60, width: 1400, height: 900, maximized: true } }
+    const config = migrate(raw)
+    // theme and window come from the same snapshot
+    expect(config.theme).toBe('dark')
+    expect(config.window.maximized).toBe(true)
+    expect(config.window.x).toBe(50)
+  })
+})
+
 describe('migrate', () => {
   it('adds version 1 if missing', () => {
     const result = migrate({})

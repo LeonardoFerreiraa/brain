@@ -2,8 +2,9 @@ import { app, BrowserWindow, session, nativeTheme, ipcMain } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { registerIpcHandlers } from './ipc/fileSystem'
-import { registerConfigHandlers, readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
+import { registerIpcHandlers, setRootFolder } from './ipc/fileSystem'
+import { registerConfigHandlers } from './ipc/config'
+import { readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
@@ -56,7 +57,7 @@ function createWindow(config: Config) {
 
   // Security: Block navigation and window.open
   win.webContents.on('will-navigate', (e) => e.preventDefault())
-  win.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -123,10 +124,10 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   registerConfigHandlers()
   cachedConfig = await readConfig()
+  if (cachedConfig.rootFolder) setRootFolder(cachedConfig.rootFolder)
 
-  // Theme: sync nativeTheme with config
-  const config = await readConfig()
-  nativeTheme.themeSource = config.theme === 'system' ? 'system' : config.theme
+  // Theme: sync nativeTheme with config (use already-read cachedConfig — no second disk read)
+  nativeTheme.themeSource = cachedConfig.theme === 'system' ? 'system' : cachedConfig.theme
 
   nativeTheme.on('updated', () => {
     if (win) {
