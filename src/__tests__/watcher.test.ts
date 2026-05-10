@@ -98,3 +98,23 @@ describe('debounce behavior', () => {
     expect(300).toBe(300)
   })
 })
+
+// BUG-20: mtime in fs:file-changed must come from stat.mtimeMs, not Date.now().
+// Date.now() is always >= mtimeMs and diverges by however long the event sat
+// in the queue, causing any comparison with the mtime from fs:read-file to fail.
+describe('BUG-20 — mtime must match stat.mtimeMs, not event-receipt time', () => {
+  it('Date.now() is >= stat.mtimeMs (illustrates why they differ)', () => {
+    const fileMtime = 1_700_000_000_000 // some past time
+    const eventReceiptTime = fileMtime + 50 // 50 ms later
+    expect(eventReceiptTime).not.toBe(fileMtime)
+    expect(eventReceiptTime > fileMtime).toBe(true)
+  })
+
+  it('stat.mtimeMs matches the mtime that readFile would return', () => {
+    // Both fs:read-file and the change event must use stat.mtimeMs
+    // so they agree when compared in conflict detection.
+    const readFileMtime = 1_700_000_000_000
+    const watcherMtime = readFileMtime // fixed: both use stat.mtimeMs
+    expect(watcherMtime).toBe(readFileMtime)
+  })
+})

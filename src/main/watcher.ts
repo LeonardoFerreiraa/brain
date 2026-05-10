@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import fs from 'node:fs/promises'
 import chokidar, { FSWatcher } from 'chokidar'
 
 // Self-write suppression: track recent writes with TTL
@@ -58,8 +59,13 @@ export function startWatcher(rootFolder: string, win: BrowserWindow) {
     .on('unlinkDir', emitTreeChanged)
     .on('change', (filePath) => {
       if (isSuppressed(filePath)) return
-      // Get mtime from stat (approximate — use Date.now() as fallback)
-      win.webContents.send('fs:file-changed', { path: filePath, mtime: Date.now() })
+      // BUG-20: use actual filesystem mtime from stat, not the event-receipt timestamp.
+      // Date.now() always differs from stat.mtimeMs, causing false conflict detection.
+      fs.stat(filePath).then(stat => {
+        win.webContents.send('fs:file-changed', { path: filePath, mtime: stat.mtimeMs })
+      }).catch(() => {
+        win.webContents.send('fs:file-changed', { path: filePath, mtime: Date.now() })
+      })
       emitTreeChanged()
     })
     .on('unlink', (filePath) => {
