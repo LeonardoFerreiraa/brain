@@ -81,6 +81,22 @@ describe('parseExcalidrawFile', () => {
   })
 })
 
+// BUG-10: Canvas must use useState for ExcalidrawComponent so dynamic import
+// triggers a re-render. We can't test React rendering here, but we verify that
+// the module no longer exports a module-level variable (the module-level `let`
+// is gone from Canvas.tsx — only the named exports remain).
+describe('BUG-10 — Canvas exports are pure functions/constants, no module-level mutable state', () => {
+  it('Canvas is exported as a function', async () => {
+    const mod = await import('../renderer/components/Canvas')
+    expect(typeof mod.Canvas).toBe('function')
+  })
+
+  it('serializeExcalidrawFile is exported', async () => {
+    const mod = await import('../renderer/components/Canvas')
+    expect(typeof mod.serializeExcalidrawFile).toBe('function')
+  })
+})
+
 // BUG-17: getContent for excalidraw must use serializeExcalidrawFile so
 // type/version are present; parseExcalidrawFile must accept the output.
 describe('BUG-17 — serialize → parse round-trip includes type and version', () => {

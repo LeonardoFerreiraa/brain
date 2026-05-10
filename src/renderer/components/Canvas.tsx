@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import type { ExcalidrawTab } from '../store/useAppStore'
 
@@ -72,26 +72,24 @@ interface CanvasProps {
   tab: ExcalidrawTab
 }
 
-// Lazy-load Excalidraw to avoid SSR/test issues
-let ExcalidrawComponent: React.ComponentType<{
+type ExcalidrawType = React.ComponentType<{
   initialData: { elements: unknown[]; appState: Record<string, unknown>; files: Record<string, unknown> }
   onChange: (elements: unknown[], appState: Record<string, unknown>, files: Record<string, unknown>) => void
-}> | null = null
+}>
 
 export function Canvas({ tab }: CanvasProps) {
   const updateTabContent = useAppStore(s => s.updateTabContent)
   const markTabDirty = useAppStore(s => s.markTabDirty)
   const containerRef = useRef<HTMLDivElement>(null)
   const isReadOnly = tab._passthrough?.['_readOnly'] === true
+  // BUG-10: use state so the dynamic import result triggers a re-render
+  const [ExcalidrawComponent, setExcalidrawComponent] = useState<ExcalidrawType | null>(null)
 
   useEffect(() => {
-    // Lazy load Excalidraw
     let mounted = true
     import('@excalidraw/excalidraw').then(mod => {
       if (mounted) {
-        // eslint-disable-next-line no-undef
-        ExcalidrawComponent = mod.Excalidraw as typeof ExcalidrawComponent
-        // Force re-render (in real app would use useState)
+        setExcalidrawComponent(() => mod.Excalidraw as ExcalidrawType)
       }
     }).catch(() => {
       // Excalidraw failed to load — show fallback
