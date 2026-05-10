@@ -6,8 +6,14 @@ import { registerIpcHandlers, setRootFolder } from './ipc/fileSystem'
 import { registerConfigHandlers } from './ipc/config'
 import { readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } from './config'
 
-// Prevent white screen on Linux systems with unsupported GPU buffer formats
+// Force software rendering on Linux — GBM driver errors (unsupported buffer
+// formats) cause Chromium's GPU helper process to fail, leaving the window
+// blank. disableHardwareAcceleration() alone is insufficient because the GPU
+// sandbox process initializes GBM before the flag is honored.
 app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+app.commandLine.appendSwitch('disable-software-rasterizer')
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
