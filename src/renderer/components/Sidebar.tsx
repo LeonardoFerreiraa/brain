@@ -196,6 +196,7 @@ export function Sidebar() {
       <div key={entry.path}>
         <div
           className="flex items-center gap-1 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm group"
+          data-testid="sidebar-entry"
           style={{ paddingLeft: `${8 + indent * 12}px` }}
           onClick={() => handleFileClick(entry)}
           onDoubleClick={() => entry.type === 'file' && handleRenameStart(entry)}
