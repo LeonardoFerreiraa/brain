@@ -7,11 +7,13 @@ export function useSessionPersist() {
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      // Synchronously save session (fire-and-forget is OK here)
+      // BUG-15: save filePath, not the UUID — tab IDs are regenerated on every
+      // session so the saved UUID would never match anything on restore.
+      const activeTab = tabs.find(t => t.id === activeTabId)
       void window.api.setConfig({
         session: {
           openTabs: tabs.map(t => t.filePath),
-          activeTab: activeTabId,
+          activeTab: activeTab?.filePath ?? null,
         },
       })
     }

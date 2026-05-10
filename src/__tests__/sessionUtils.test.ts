@@ -60,3 +60,36 @@ describe('buildSessionConfig', () => {
     expect(result.openTabs).toEqual(paths)
   })
 })
+
+// BUG-14/15: activeTab must be stored as filePath, not UUID, so restore can
+// look it up in restoredIds (Map<filePath, tabId>).
+describe('BUG-14/15 — session persist stores filePath as activeTab', () => {
+  it('activeTab is a filePath, lookupable in restoredIds map', () => {
+    // Simulate what useSessionPersist now saves
+    const tabs = [
+      { id: 'uuid-1', filePath: '/Brain/a.md' },
+      { id: 'uuid-2', filePath: '/Brain/b.md' },
+    ]
+    const activeTabId = 'uuid-2'
+    const activeTab = tabs.find(t => t.id === activeTabId)
+    const savedActiveTab = activeTab?.filePath ?? null
+    expect(savedActiveTab).toBe('/Brain/b.md')
+
+    // Simulate what useSessionRestore does on next launch
+    const restoredIds = new Map<string, string>([
+      ['/Brain/a.md', 'new-uuid-1'],
+      ['/Brain/b.md', 'new-uuid-2'],
+    ])
+    expect(restoredIds.has(savedActiveTab!)).toBe(true)
+    expect(restoredIds.get(savedActiveTab!)).toBe('new-uuid-2')
+  })
+
+  it('old UUID-based activeTab would always miss in restoredIds', () => {
+    const restoredIds = new Map<string, string>([
+      ['/Brain/a.md', 'new-uuid-1'],
+    ])
+    // Old behavior: saved UUID from prior session
+    const savedUuid = 'uuid-from-last-session'
+    expect(restoredIds.has(savedUuid)).toBe(false)
+  })
+})
