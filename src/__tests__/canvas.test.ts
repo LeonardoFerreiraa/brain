@@ -81,6 +81,37 @@ describe('parseExcalidrawFile', () => {
   })
 })
 
+// BUG-17: getContent for excalidraw must use serializeExcalidrawFile so
+// type/version are present; parseExcalidrawFile must accept the output.
+describe('BUG-17 — serialize → parse round-trip includes type and version', () => {
+  const tab: ExcalidrawTab = {
+    id: 'rt',
+    type: 'excalidraw',
+    filePath: '/Brain/rt.excalidraw',
+    fileName: 'rt.excalidraw',
+    dirty: false,
+    elements: [{ id: 'e1', type: 'ellipse' }],
+    appState: { viewBackgroundColor: '#000' },
+    files: {},
+  }
+
+  it('serialized output passes parseExcalidrawFile validation', () => {
+    const serialized = serializeExcalidrawFile(tab)
+    const result = parseExcalidrawFile(serialized)
+    expect(result.ok).toBe(true)
+  })
+
+  it('serialized output contains type field', () => {
+    const parsed = JSON.parse(serializeExcalidrawFile(tab)) as ExcalidrawFileData
+    expect(parsed.type).toBe('excalidraw')
+  })
+
+  it('serialized output contains version field', () => {
+    const parsed = JSON.parse(serializeExcalidrawFile(tab)) as ExcalidrawFileData
+    expect(typeof parsed.version).toBe('number')
+  })
+})
+
 describe('serializeExcalidrawFile', () => {
   const mockTab: ExcalidrawTab = {
     id: 'test-id',

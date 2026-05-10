@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import type { Tab } from '../store/useAppStore'
 import { computeContentHash } from '../../utils/hashUtils'
+import { serializeExcalidrawFile } from '../components/Canvas'
 
 const DEBOUNCE_MS = 1000
 
@@ -25,14 +26,20 @@ function getSaveState(tabId: string): SaveState {
   return saveStates.get(tabId)!
 }
 
+export function pruneSaveState(tabId: string) {
+  const state = saveStates.get(tabId)
+  if (state?.retryTimer) clearTimeout(state.retryTimer)
+  saveStates.delete(tabId)
+}
+
 export function useSave(tab: Tab) {
   const markTabDirty = useAppStore(s => s.markTabDirty)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const getContent = useCallback((): string => {
     if (tab.type === 'markdown') return tab.content
-    // For excalidraw, serialize key fields
-    return JSON.stringify({ elements: tab.elements, appState: tab.appState, files: tab.files })
+    // BUG-17: use serializeExcalidrawFile to include type/version fields
+    return serializeExcalidrawFile(tab)
   }, [tab])
 
   const doSave = useCallback(async () => {
@@ -88,17 +95,32 @@ export function useSave(tab: Tab) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [saveImmediately])
 
+  // BUG-07: cancel pending retry timer and debounce on unmount so we never
+  // write to a closed/deleted tab after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+      pruneSaveState(tab.id)
+    }
+  }, [tab.id])
+
   // Trigger auto-save when content changes
+  // BUG-08: read dirtyState fresh from the map at effect time instead of
+  // capturing the stale value from the render that scheduled this effect.
   const contentHash = computeContentHash(getContent())
-  const state = getSaveState(tab.id)
-  const isContentChanged = contentHash !== state.hash
 
   useEffect(() => {
+    const state = getSaveState(tab.id)
+    const isContentChanged = contentHash !== state.hash
     if (isContentChanged && state.dirtyState !== 'pending') {
       scheduleSave()
     }
-  }, [isContentChanged, scheduleSave, state.dirtyState])
+  }, [contentHash, tab.id, scheduleSave])
 
+  const state = getSaveState(tab.id)
   return {
     saveImmediately,
     scheduleSave,
