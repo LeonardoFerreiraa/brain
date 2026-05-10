@@ -117,12 +117,18 @@ export function registerIpcHandlers() {
 
   // fs:watch-start
   ipcMain.handle('fs:watch-start', async (_e, { path: watchPath }) => {
-    const { startWatcher } = await import('../watcher')
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    if (win) {
-      startWatcher(watchPath, win)
+    try {
+      // Validate path against root before starting watcher (path-traversal guard)
+      const resolved = await resolveAndValidate(watchPath)
+      const { startWatcher } = await import('../watcher')
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+      if (!win) return { ok: false, code: 'NO_WINDOW', message: 'No browser window available' }
+      startWatcher(resolved, win)
+      return { ok: true }
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException
+      return { ok: false, code: error.code ?? 'UNKNOWN', message: error.message }
     }
-    return { ok: true }
   })
 
   // config:get and config:set are handled in config module (see issue #4)

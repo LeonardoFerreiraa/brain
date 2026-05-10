@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isValidCspDirective, isSafeExternalUrl } from '../utils/securityUtils'
+import { isUnderRoot } from '../utils/pathUtils'
 
 describe('isValidCspDirective', () => {
   it('validates correct CSP', () => {
@@ -18,6 +19,27 @@ describe('isValidCspDirective', () => {
 
   it('rejects missing default-src', () => {
     expect(isValidCspDirective("object-src 'none'; frame-ancestors 'none'")).toBe(false)
+  })
+})
+
+// BUG-03: fs:watch-start must validate watchPath against rootFolder
+describe('watch-start path traversal guard', () => {
+  const root = '/home/user/Brain'
+
+  it('allows vault root itself', () => {
+    expect(isUnderRoot('/home/user/Brain', root)).toBe(true)
+  })
+
+  it('allows path inside vault', () => {
+    expect(isUnderRoot('/home/user/Brain/sub', root)).toBe(true)
+  })
+
+  it('rejects /etc', () => {
+    expect(isUnderRoot('/etc', root)).toBe(false)
+  })
+
+  it('rejects sibling directory', () => {
+    expect(isUnderRoot('/home/user/BrainBackup', root)).toBe(false)
   })
 })
 
