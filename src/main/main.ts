@@ -13,7 +13,9 @@ import { readConfig, mergeConfig, saveWindowBounds, applyWindowBounds, Config } 
 app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('disable-gpu-compositing')
-app.commandLine.appendSwitch('disable-software-rasterizer')
+// SwiftShader is Chromium's bundled pure-software GL — bypasses system GBM
+// entirely, stopping the "Unknown or not supported format" errors on Linux
+app.commandLine.appendSwitch('use-gl', 'swiftshader')
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const require = createRequire(import.meta.url)
