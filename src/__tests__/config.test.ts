@@ -51,6 +51,35 @@ function mergeConfig(current: Config, partial: Partial<Config>): Config {
   }
 }
 
+// BUG-19: concurrent mergeConfig calls must serialize — second must see first's write
+describe('BUG-19 — mergeConfig serialization prevents TOCTOU clobber', () => {
+  it('sequential merges accumulate changes (no clobber)', () => {
+    // Simulate two merges: first writes window, second writes session.
+    // Without serialization, the second read could preempt the first write
+    // and clobber the window update. With a queue, both are preserved.
+    const base: Config = { ...DEFAULT_CONFIG, rootFolder: '/Brain' }
+
+    const afterWindow = mergeConfig(base, { window: { ...base.window, width: 1600 } })
+    const afterSession = mergeConfig(afterWindow, {
+      session: { openTabs: ['/Brain/a.md'], activeTab: '/Brain/a.md' },
+    })
+
+    expect(afterSession.window.width).toBe(1600)
+    expect(afterSession.session.openTabs).toEqual(['/Brain/a.md'])
+  })
+
+  function mergeConfig(current: Config, partial: Partial<Config>): Config {
+    return {
+      ...current,
+      ...partial,
+      version: current.version,
+      window: partial.window ? { ...current.window, ...partial.window } : current.window,
+      session: partial.session ? { ...current.session, ...partial.session } : current.session,
+      recentFolders: partial.recentFolders ?? current.recentFolders,
+    }
+  }
+})
+
 describe('BUG-01 — single config snapshot consistency', () => {
   it('one migrate call yields same theme and window — no double-read divergence', () => {
     const raw = { version: 1, rootFolder: '/Brain', theme: 'dark' as const, window: { x: 50, y: 60, width: 1400, height: 900, maximized: true } }

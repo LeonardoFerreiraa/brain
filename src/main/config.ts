@@ -73,20 +73,29 @@ export async function writeConfig(config: Config): Promise<void> {
   await fs.rename(tmpPath, configPath)
 }
 
+// BUG-19: serialize all mergeConfig calls through a promise chain so concurrent
+// callers (e.g. saveWindowBounds on quit racing config:set from renderer) each
+// read and write the fully-committed state of the previous write.
+let writeQueue: Promise<unknown> = Promise.resolve()
+
 export async function mergeConfig(partial: Partial<Config>): Promise<Config> {
-  const current = await readConfig()
-  const merged: Config = {
-    ...current,
-    ...partial,
-    version: current.version,
-    // Objects: deep merge
-    window: partial.window ? { ...current.window, ...partial.window } : current.window,
-    session: partial.session ? { ...current.session, ...partial.session } : current.session,
-    // Arrays: replace wholesale
-    recentFolders: partial.recentFolders ?? current.recentFolders,
-  }
-  await writeConfig(merged)
-  return merged
+  const result = writeQueue.then(async (): Promise<Config> => {
+    const current = await readConfig()
+    const merged: Config = {
+      ...current,
+      ...partial,
+      version: current.version,
+      // Objects: deep merge
+      window: partial.window ? { ...current.window, ...partial.window } : current.window,
+      session: partial.session ? { ...current.session, ...partial.session } : current.session,
+      // Arrays: replace wholesale
+      recentFolders: partial.recentFolders ?? current.recentFolders,
+    }
+    await writeConfig(merged)
+    return merged
+  })
+  writeQueue = result.catch(() => {})
+  return result
 }
 
 export function saveWindowBounds(win: BrowserWindow): Promise<void> {
