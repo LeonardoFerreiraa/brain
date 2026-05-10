@@ -12,6 +12,11 @@ import { useSessionPersist } from './hooks/useSessionPersist'
 import type { MarkdownTab, ExcalidrawTab } from './store/useAppStore'
 
 function App() {
+  // Tree-shaken in production; used only by e2e error-boundary tests
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('devThrow') === '1') {
+    throw new Error('dev: intentional render error for boundary testing')
+  }
+
   const rootFolder = useAppStore(s => s.rootFolder)
   const setRootFolder = useAppStore(s => s.setRootFolder)
   const tabs = useAppStore(s => s.tabs)

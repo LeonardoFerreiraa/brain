@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { setupMock } from './helpers/api-mock'
 
 // Mock Electron APIs before any page script runs
 test.beforeEach(async ({ page }) => {
@@ -47,4 +48,11 @@ test('page has no console errors on load', async ({ page }) => {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   expect(errors).toHaveLength(0)
+})
+
+test('app initial state matches visual snapshot', async ({ page }) => {
+  await setupMock(page, { config: { rootFolder: '/vault' } })
+  await page.goto('/')
+  await page.waitForSelector('[data-testid="empty-state"]')
+  await expect(page).toHaveScreenshot('app-initial-state.png')
 })
