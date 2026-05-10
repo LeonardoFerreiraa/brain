@@ -35,6 +35,18 @@ describe('useAppStore', () => {
       expect(activeTabId).toBe(id)
     })
 
+    it('BUG-06: enforces hard cap — does not open tab beyond TAB_HARD_CAP', () => {
+      // Fill to hard cap (50)
+      for (let i = 0; i < 50; i++) {
+        useAppStore.getState().openFile(`/Brain/note${i}.md`, `note${i}.md`, 'markdown')
+      }
+      expect(useAppStore.getState().tabs).toHaveLength(50)
+      // Attempt to open one more
+      const id = useAppStore.getState().openFile('/Brain/overflow.md', 'overflow.md', 'markdown')
+      expect(id).toBe('')
+      expect(useAppStore.getState().tabs).toHaveLength(50)
+    })
+
     it('opens excalidraw tab', () => {
       useAppStore.getState().openFile('/Brain/draw.excalidraw', 'draw.excalidraw', 'excalidraw')
       const { tabs } = useAppStore.getState()

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
+import { TAB_HARD_CAP } from '../../utils/tabUtils'
 
 // Excalidraw types — imported as type-only to avoid runtime issues in tests
 // In production these match @excalidraw/excalidraw types exactly
@@ -81,6 +82,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ activeTabId: existing.id })
       return existing.id
     }
+    // Enforce hard cap — refuse to open beyond limit
+    if (tabs.length >= TAB_HARD_CAP) return ''
     const id = uuidv4()
     const newTab: Tab = type === 'excalidraw'
       ? { id, type: 'excalidraw', filePath, fileName, dirty: false, elements: [], appState: {}, files: {} }
