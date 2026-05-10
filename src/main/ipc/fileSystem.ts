@@ -2,7 +2,7 @@ import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { recordWrite } from '../watcher'
+import { recordWrite, initialScan } from '../watcher'
 
 // Config for path validation
 let rootFolder: string | null = null
@@ -44,7 +44,12 @@ export function registerIpcHandlers() {
   ipcMain.handle('fs:write-file', async (_e, { path: filePath, content }) => {
     let tmpPath: string | undefined
     try {
-      const resolved = await resolveAndValidate(filePath)
+      if (!rootFolder) throw new Error('Root folder not set')
+      const canonicalRoot = await fs.realpath(rootFolder)
+      const resolved = path.resolve(filePath)
+      if (!resolved.startsWith(canonicalRoot + path.sep) && resolved !== canonicalRoot) {
+        throw new Error(`Path traversal detected: ${filePath}`)
+      }
       tmpPath = resolved + '.tmp'
       await fs.writeFile(tmpPath, content, 'utf-8')
       await fs.rename(tmpPath, resolved)
@@ -92,6 +97,9 @@ export function registerIpcHandlers() {
 
   // dialog:pick-folder
   ipcMain.handle('dialog:pick-folder', async (_e, { defaultPath }) => {
+    // Test hook: set global.__e2ePickFolder to bypass native dialog
+    const override = (global as Record<string, unknown>).__e2ePickFolder
+    if (override !== undefined) return { path: override }
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
       defaultPath: defaultPath ?? path.join(os.homedir(), 'Brain'),
@@ -124,6 +132,8 @@ export function registerIpcHandlers() {
       const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
       if (!win) return { ok: false, code: 'NO_WINDOW', message: 'No browser window available' }
       startWatcher(resolved, win)
+      // Perform initial scan to populate the sidebar
+      initialScan(resolved, win).catch(() => {})
       return { ok: true }
     } catch (err) {
       const error = err as NodeJS.ErrnoException

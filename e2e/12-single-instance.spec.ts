@@ -1,13 +1,13 @@
-import { test } from '@playwright/test'
+import { test } from './fixtures/electron'
 
-// Single instance lock tests require Electron runtime and cannot be tested in browser mode.
-// app.requestSingleInstanceLock() is a Node.js/Electron API not available in the browser.
-// These tests must be run with an Electron-aware test runner against the packaged app.
+// Single instance lock tests require testing two Electron instances.
+// The first instance uses the electron fixture, and would need a second instance
+// launched via electron.launch pointing to the same userData dir.
 
 test.describe('TC-12: Single Instance', () => {
   test.skip(
     true,
-    'Single instance lock tests require Electron runtime and cannot be tested in browser mode.',
+    'Single instance lock tests require launching two Electron instances and checking inter-process communication. Deferred to integration test suite.',
   )
 
   test('TC-12.1 — Second launch quits immediately', async () => {

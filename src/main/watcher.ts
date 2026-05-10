@@ -1,5 +1,7 @@
 import { BrowserWindow } from 'electron'
 import fs from 'node:fs/promises'
+import path from 'node:path'
+import type { Dirent } from 'node:fs'
 import chokidar, { FSWatcher } from 'chokidar'
 
 // Self-write suppression: track recent writes with TTL
@@ -79,5 +81,53 @@ export function stopWatcher() {
   if (watcher) {
     watcher.close()
     watcher = null
+  }
+}
+
+export interface TreeEntry {
+  path: string
+  name: string
+  type: 'file' | 'dir'
+  depth: number
+}
+
+const MAX_DEPTH = 20
+const BATCH_SIZE = 100
+
+export async function initialScan(rootFolder: string, win: BrowserWindow): Promise<void> {
+  const batch: TreeEntry[] = []
+
+  async function scanDir(dirPath: string, depth: number): Promise<void> {
+    if (depth > MAX_DEPTH) return
+    let entries: Dirent[]
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      if (entry.name === 'node_modules') continue
+
+      const fullPath = path.join(dirPath, entry.name)
+      const type: 'file' | 'dir' = entry.isDirectory() ? 'dir' : 'file'
+
+      batch.push({ path: fullPath, name: entry.name, type, depth })
+
+      if (batch.length >= BATCH_SIZE) {
+        win.webContents.send('fs:tree-entry', batch.splice(0, BATCH_SIZE))
+        await new Promise<void>(r => setImmediate(r))
+      }
+
+      if (entry.isDirectory()) {
+        await scanDir(fullPath, depth + 1)
+      }
+    }
+  }
+
+  await scanDir(rootFolder, 0)
+
+  if (batch.length > 0) {
+    win.webContents.send('fs:tree-entry', batch.splice(0))
   }
 }

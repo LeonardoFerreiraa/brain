@@ -1,169 +1,185 @@
-import { test, expect } from '@playwright/test'
-import { setupMock } from './helpers/api-mock'
+import { test, expect } from './fixtures/electron'
+import { createVaultFile } from './helpers/vault'
+import { join } from 'node:path'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { resolve } from 'node:path'
+import { _electron as electron } from '@playwright/test'
+
+// Helper to launch app with a custom session config
+async function launchWithSession(vault: string, session: { openTabs: string[]; activeTab: string | null }, workerIndex: number) {
+  const userData = await mkdtemp(join(tmpdir(), `brain-session-${workerIndex}-`))
+  await mkdir(userData, { recursive: true })
+  await writeFile(join(userData, 'config.json'), JSON.stringify({
+    version: 1,
+    rootFolder: vault,
+    theme: 'light',
+    session,
+    recentFolders: [],
+    window: { x: 100, y: 100, width: 1200, height: 800, maximized: false },
+  }))
+  const app = await electron.launch({
+    args: [resolve('dist-electron/main.js'), `--user-data-dir=${userData}`],
+    env: { ...process.env, NODE_ENV: 'test' },
+  })
+  const page = await app.firstWindow()
+  await page.waitForLoadState('domcontentloaded')
+  return { app, page, userData }
+}
 
 test.describe('TC-13: Session Restore', () => {
-  test('TC-13.1 — Open tabs restored on relaunch', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/note.md', '/vault/drawing.excalidraw'],
-          activeTab: '/vault/note.md',
-        },
-      },
-      readFile: {
-        '/vault/note.md': '# Note',
-        '/vault/drawing.excalidraw': JSON.stringify({ elements: [], appState: {} }),
-      },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.1 — Open tabs restored on relaunch', async ({ vault }, testInfo) => {
+    await createVaultFile(vault, 'note.md', '# Note')
+    await createVaultFile(vault, 'drawing.excalidraw', JSON.stringify({ elements: [], appState: {} }))
 
-    // Both tabs should be present in the tab bar
-    const tabBar = page.locator('[data-testid="tab-bar"]')
-    await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
-    await expect(tabBar.getByText('drawing.excalidraw')).toBeVisible({ timeout: 5000 })
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'note.md'), join(vault, 'drawing.excalidraw')],
+      activeTab: join(vault, 'note.md'),
+    }, testInfo.workerIndex)
+
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
+
+      const tabBar = page.locator('[data-testid="tab-bar"]')
+      await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+      await expect(tabBar.getByText('drawing.excalidraw')).toBeVisible({ timeout: 5000 })
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 
-  test('TC-13.2 — Active tab restored', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/note.md'],
-          activeTab: '/vault/note.md',
-        },
-      },
-      readFile: { '/vault/note.md': '# Note' },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.2 — Active tab restored', async ({ vault }, testInfo) => {
+    await createVaultFile(vault, 'note.md', '# Note')
 
-    // The 'note.md' tab should be the active one (has border-blue-500 styling)
-    const tabBar = page.locator('[data-testid="tab-bar"]')
-    await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'note.md')],
+      activeTab: join(vault, 'note.md'),
+    }, testInfo.workerIndex)
 
-    // Check that the tab has active styling (border-blue-500 or active class)
-    const activeTab = tabBar.locator('[class*="border-blue-500"], [class*="active"], [aria-selected="true"]').first()
-    await expect(activeTab).toBeVisible()
-    await expect(activeTab).toContainText('note.md')
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
+
+      const tabBar = page.locator('[data-testid="tab-bar"]')
+      await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+
+      // Check that the tab has active styling
+      const activeTab = tabBar.locator('[class*="border-blue-500"], [class*="active"], [aria-selected="true"]').first()
+      await expect(activeTab).toBeVisible()
+      await expect(activeTab).toContainText('note.md')
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 
-  test('TC-13.3 — Missing file silently skipped', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/deleted.md', '/vault/note.md'],
-          activeTab: '/vault/note.md',
-        },
-      },
-      readFile: {
-        // deleted.md is NOT in readFile map → readFile returns ok:false
-        '/vault/note.md': '# Note',
-      },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.3 — Missing file silently skipped', async ({ vault }, testInfo) => {
+    // deleted.md doesn't exist on disk — only note.md does
+    await createVaultFile(vault, 'note.md', '# Note')
 
-    const tabBar = page.locator('[data-testid="tab-bar"]')
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'deleted.md'), join(vault, 'note.md')],
+      activeTab: join(vault, 'note.md'),
+    }, testInfo.workerIndex)
 
-    // note.md should be present
-    await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
 
-    // deleted.md should NOT appear
-    await expect(tabBar.getByText('deleted.md')).not.toBeVisible()
+      const tabBar = page.locator('[data-testid="tab-bar"]')
 
-    // No error toast / error message should appear
-    await expect(page.getByText(/error/i)).not.toBeVisible()
+      // note.md should be present
+      await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+
+      // deleted.md should NOT appear
+      await expect(tabBar.getByText('deleted.md')).not.toBeVisible()
+
+      // No error toast / error message should appear
+      await expect(page.getByText(/error/i)).not.toBeVisible()
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 
-  test('TC-13.4 — Tab order preserved', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/a.md', '/vault/b.md', '/vault/c.md'],
-          activeTab: '/vault/a.md',
-        },
-      },
-      readFile: {
-        '/vault/a.md': '# A',
-        '/vault/b.md': '# B',
-        '/vault/c.md': '# C',
-      },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.4 — Tab order preserved', async ({ vault }, testInfo) => {
+    await createVaultFile(vault, 'a.md', '# A')
+    await createVaultFile(vault, 'b.md', '# B')
+    await createVaultFile(vault, 'c.md', '# C')
 
-    const tabBar = page.locator('[data-testid="tab-bar"]')
-    await expect(tabBar.getByText('a.md')).toBeVisible({ timeout: 5000 })
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'a.md'), join(vault, 'b.md'), join(vault, 'c.md')],
+      activeTab: join(vault, 'a.md'),
+    }, testInfo.workerIndex)
 
-    // Collect tab labels in DOM order via the filename spans inside each tab item
-    const tabLabels = await tabBar.locator('[data-testid="tab-item"] span.truncate').allTextContents()
-    const filteredLabels = tabLabels.map((t) => t.trim()).filter((t) => t === 'a.md' || t === 'b.md' || t === 'c.md')
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
 
-    expect(filteredLabels).toEqual(['a.md', 'b.md', 'c.md'])
+      const tabBar = page.locator('[data-testid="tab-bar"]')
+      await expect(tabBar.getByText('a.md')).toBeVisible({ timeout: 5000 })
+
+      // Collect tab labels in DOM order
+      const tabLabels = await tabBar.locator('[data-testid="tab-item"] span.truncate').allTextContents()
+      const filteredLabels = tabLabels.map((t) => t.trim()).filter((t) => t === 'a.md' || t === 'b.md' || t === 'c.md')
+
+      expect(filteredLabels).toEqual(['a.md', 'b.md', 'c.md'])
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 
-  test('TC-13.5 — Session saved on close', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/note.md'],
-          activeTab: '/vault/note.md',
-        },
-      },
-      readFile: { '/vault/note.md': '# Note' },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.5 — Session saved on close', async ({ vault }, testInfo) => {
+    await createVaultFile(vault, 'note.md', '# Note')
 
-    // Wait for note.md tab to be restored
-    const tabBar = page.locator('[data-testid="tab-bar"]')
-    await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'note.md')],
+      activeTab: join(vault, 'note.md'),
+    }, testInfo.workerIndex)
 
-    // Simulate window beforeunload event (triggers session save)
-    await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')))
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
 
-    await page.waitForTimeout(300)
+      // Wait for note.md tab to be restored
+      const tabBar = page.locator('[data-testid="tab-bar"]')
+      await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
 
-    // Check that the saved config contains the open tab
-    const savedConfig = await page.evaluate(() => (window as any).__getSavedConfig())
-    const openTabs: string[] = savedConfig?.session?.openTabs ?? []
-    expect(openTabs).toContain('/vault/note.md')
+      // Simulate window beforeunload event (triggers session save)
+      await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')))
+
+      await page.waitForTimeout(300)
+
+      // Check that the saved config contains the open tab via real IPC
+      const savedConfig = await page.evaluate(() => window.api.getConfig())
+      const openTabs: string[] = (savedConfig as any)?.session?.openTabs ?? []
+      expect(openTabs).toContain(join(vault, 'note.md'))
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 
-  test('TC-13.6 — Unknown extension skipped', async ({ page }) => {
-    await setupMock(page, {
-      config: {
-        rootFolder: '/vault',
-        session: {
-          openTabs: ['/vault/file.pdf', '/vault/note.md'],
-          activeTab: '/vault/note.md',
-        },
-      },
-      readFile: {
-        '/vault/file.pdf': '%PDF binary content',
-        '/vault/note.md': '# Note',
-      },
-    })
-    await page.goto('/')
-    // Wait for app layout to render (tab-bar is always present when rootFolder is set)
-    await page.waitForSelector('[data-testid="tab-bar"]')
+  test('TC-13.6 — Unknown extension skipped', async ({ vault }, testInfo) => {
+    await createVaultFile(vault, 'file.pdf', '%PDF binary content')
+    await createVaultFile(vault, 'note.md', '# Note')
 
-    const tabBar = page.locator('[data-testid="tab-bar"]')
+    const { app, page, userData } = await launchWithSession(vault, {
+      openTabs: [join(vault, 'file.pdf'), join(vault, 'note.md')],
+      activeTab: join(vault, 'note.md'),
+    }, testInfo.workerIndex)
 
-    // note.md should be present
-    await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+    try {
+      await page.waitForSelector('[data-testid="tab-bar"]')
 
-    // file.pdf should NOT appear (unknown extension is skipped)
-    await expect(tabBar.getByText('file.pdf')).not.toBeVisible()
+      const tabBar = page.locator('[data-testid="tab-bar"]')
+
+      // note.md should be present
+      await expect(tabBar.getByText('note.md')).toBeVisible({ timeout: 5000 })
+
+      // file.pdf should NOT appear (unknown extension is skipped)
+      await expect(tabBar.getByText('file.pdf')).not.toBeVisible()
+    } finally {
+      await app.close().catch(() => {})
+      await rm(userData, { recursive: true, force: true }).catch(() => {})
+    }
   })
 })

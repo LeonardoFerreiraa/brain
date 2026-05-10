@@ -78,12 +78,14 @@ export function Sidebar() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const offEntry = window.api.onTreeEntry((batch: any) => {
       setEntries((prev) => {
-        const newEntries = [...prev, ...(batch as TreeEntry[])]
-        if (newEntries.length >= 50000) {
+        const existingPaths = new Set(prev.map(e => e.path))
+        const fresh = (batch as TreeEntry[]).filter(e => !existingPaths.has(e.path))
+        const combined = [...prev, ...fresh]
+        if (combined.length >= 50000) {
           setTruncated(true)
-          return newEntries.slice(0, 50000)
+          return combined.slice(0, 50000)
         }
-        return newEntries
+        return combined
       })
     })
 

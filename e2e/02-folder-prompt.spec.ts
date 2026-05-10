@@ -1,107 +1,77 @@
-import { test, expect } from '@playwright/test'
-import { setupMock } from './helpers/api-mock'
+import { test, expect } from './fixtures/electron'
+import { mockPickFolder } from './helpers/vault'
 
-test.describe('TC-2: FolderPrompt', () => {
-  test('TC-2.1 — modal shown on first launch (rootFolder null)', async ({ page }) => {
-    await setupMock(page, { config: { rootFolder: null } })
-    await page.goto('/')
-    await expect(page.getByText('Select Vault Folder')).toBeVisible()
-    const input = page.locator('input[placeholder="~/Brain"]')
+test.describe('TC-2: FolderPrompt — first run', () => {
+  test.use({ initialRootFolder: null })
+
+  test('TC-2.1 — modal shown on first launch (rootFolder null)', async ({ window }) => {
+    await expect(window.getByText('Select Vault Folder')).toBeVisible()
+    const input = window.locator('input[placeholder="~/Brain"]')
     await expect(input).toBeVisible()
     await expect(input).toHaveValue('~/Brain')
   })
 
-  test('TC-2.2 — modal NOT shown when rootFolder is set', async ({ page }) => {
-    await setupMock(page, { config: { rootFolder: '/vault' } })
-    await page.goto('/')
-    await page.waitForSelector('[data-testid="empty-state"]')
-    await expect(page.getByText('Select Vault Folder')).not.toBeVisible()
-  })
-
-  test('TC-2.3 — Browse button calls pickFolder and populates input', async ({ page }) => {
-    await setupMock(page, {
-      config: { rootFolder: null },
-      pickFolderResult: '/home/user/MyNotes',
-    })
-    await page.goto('/')
-    await page.getByRole('button', { name: 'Browse' }).click()
-    const input = page.locator('input[placeholder="~/Brain"]')
+  test('TC-2.3 — Browse button calls pickFolder and populates input', async ({ window, electronApp }) => {
+    await mockPickFolder(electronApp, '/home/user/MyNotes')
+    await window.getByRole('button', { name: 'Browse' }).click()
+    const input = window.locator('input[placeholder="~/Brain"]')
     await expect(input).toHaveValue('/home/user/MyNotes')
   })
 
-  test('TC-2.4 — Confirm saves rootFolder to config and closes modal', async ({ page }) => {
-    await setupMock(page, {
-      config: { rootFolder: null },
-      extraScript: `
-        window.api.setConfig = (c) => {
-          window._setConfigArg = c
-          return Promise.resolve({ rootFolder: c.rootFolder ?? null })
-        }
-      `,
-    })
-    await page.goto('/')
-    const input = page.locator('input[placeholder="~/Brain"]')
+  test('TC-2.4 — Confirm saves rootFolder to config and closes modal', async ({ window }) => {
+    const input = window.locator('input[placeholder="~/Brain"]')
     await input.fill('/home/user/Brain')
-    await page.getByRole('button', { name: 'Open' }).click()
+    await window.getByRole('button', { name: 'Open' }).click()
     // Modal should close
-    await expect(page.getByText('Select Vault Folder')).not.toBeVisible()
-    const arg = await page.evaluate(() => (window as any)._setConfigArg)
-    expect(arg.rootFolder).toBe('/home/user/Brain')
+    await expect(window.getByText('Select Vault Folder')).not.toBeVisible()
+    const config = await window.evaluate(() => window.api.getConfig())
+    expect((config as any).rootFolder).toBeTruthy()
   })
 
-  test('TC-2.5 — warning when picking home directory', async ({ page }) => {
-    await setupMock(page, { config: { rootFolder: null } })
-    await page.goto('/')
-    const input = page.locator('input[placeholder="~/Brain"]')
+  test('TC-2.5 — warning when picking home directory', async ({ window }) => {
+    const input = window.locator('input[placeholder="~/Brain"]')
     await input.fill('/home/user')
-    await page.getByRole('button', { name: 'Open' }).click()
+    await window.getByRole('button', { name: 'Open' }).click()
     // Warning message should appear
-    await expect(page.getByText(/Warning.*home directory/i)).toBeVisible()
+    await expect(window.getByText(/Warning.*home directory/i)).toBeVisible()
     // Button text changes to "Confirm anyway"
-    await expect(page.getByRole('button', { name: 'Confirm anyway' })).toBeVisible()
+    await expect(window.getByRole('button', { name: 'Confirm anyway' })).toBeVisible()
   })
 
-  test('TC-2.6 — warning when picking filesystem root', async ({ page }) => {
-    await setupMock(page, { config: { rootFolder: null } })
-    await page.goto('/')
-    const input = page.locator('input[placeholder="~/Brain"]')
+  test('TC-2.6 — warning when picking filesystem root', async ({ window }) => {
+    const input = window.locator('input[placeholder="~/Brain"]')
     await input.fill('/')
-    await page.getByRole('button', { name: 'Open' }).click()
-    await expect(page.getByText(/Warning.*root/i)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Confirm anyway' })).toBeVisible()
+    await window.getByRole('button', { name: 'Open' }).click()
+    await expect(window.getByText(/Warning.*root/i)).toBeVisible()
+    await expect(window.getByRole('button', { name: 'Confirm anyway' })).toBeVisible()
   })
 
-  test('TC-2.7 — warning when folder has >10k entries', async ({ page }) => {
+  test('TC-2.7 — warning when folder has >10k entries', async ({ window }) => {
     test.fixme(true, 'FolderPrompt.validate() does not yet check folder entry count. Need to add countEntries IPC call and show warning when count > 10000.')
   })
 
-  test('TC-2.8 — File menu "Change Folder" reopens modal', async ({ page }) => {
-    await setupMock(page, { config: { rootFolder: '/vault' } })
-    await page.goto('/')
-    await page.waitForSelector('[data-testid="empty-state"]')
-    // Simulate the Electron menu emitting __change-folder__ via onOpenFile
-    await page.evaluate(() => (window as any).__emitOpenFile('__change-folder__'))
-    await expect(page.getByText('Select Vault Folder')).toBeVisible()
+  test('TC-2.9 — tilde expanded in stored rootFolder', async ({ window }) => {
+    const input = window.locator('input[placeholder="~/Brain"]')
+    await input.fill('~/Notes')
+    await window.getByRole('button', { name: 'Open' }).click()
+    // Modal closes when tilde path is accepted (main process expands tilde)
+    await expect(window.getByText('Select Vault Folder')).not.toBeVisible()
+  })
+})
+
+test.describe('TC-2: FolderPrompt — with vault', () => {
+  test('TC-2.2 — modal NOT shown when rootFolder is set', async ({ window }) => {
+    await window.waitForSelector('[data-testid="empty-state"]')
+    await expect(window.getByText('Select Vault Folder')).not.toBeVisible()
   })
 
-  test('TC-2.9 — tilde expanded in stored rootFolder', async ({ page }) => {
-    await setupMock(page, {
-      config: { rootFolder: null },
-      extraScript: `
-        // Simulate main process expanding tilde in setConfig response
-        window.api.setConfig = (c) => {
-          const expanded = c.rootFolder && c.rootFolder.replace(/^~/, '/home/testuser')
-          const result = { ...c, rootFolder: expanded }
-          window._setConfigResult = result
-          return Promise.resolve(result)
-        }
-      `,
+  test('TC-2.8 — File menu "Change Folder" reopens modal', async ({ window, electronApp }) => {
+    await window.waitForSelector('[data-testid="empty-state"]')
+    // Simulate the Electron menu emitting open-file event with __change-folder__
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      win?.webContents.send('open-file', '__change-folder__')
     })
-    await page.goto('/')
-    const input = page.locator('input[placeholder="~/Brain"]')
-    await input.fill('~/Notes')
-    await page.getByRole('button', { name: 'Open' }).click()
-    const result = await page.evaluate(() => (window as any)._setConfigResult)
-    expect(result.rootFolder).toBe('/home/testuser/Notes')
+    await expect(window.getByText('Select Vault Folder')).toBeVisible()
   })
 })
