@@ -37,8 +37,12 @@ export function MarkdownEditor({ tab, isDark = false }: MarkdownEditorProps) {
       ...(softWrap ? [EditorView.lineWrapping] : []),
     ]
 
+    // BUG-09: use the live editor content when recreating (theme/wrap change),
+    // not tab.content which may lag behind pending debounced keystrokes.
+    const liveContent = viewRef.current?.state.doc.toString() ?? tab.content
+
     const view = new EditorView({
-      doc: tab.content,
+      doc: liveContent,
       extensions,
       parent: editorRef.current,
     })
