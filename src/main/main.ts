@@ -125,13 +125,17 @@ app.on('activate', async () => {
 
 app.whenReady().then(async () => {
   // Security: Set Content Security Policy header
+  // Dev needs 'unsafe-inline' + localhost sources for Vite HMR and React Fast Refresh preamble.
+  // Production uses strict policy with no inline scripts.
+  const csp = VITE_DEV_SERVER_URL
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' http://localhost:5173 ws://localhost:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    : "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-        ],
+        'Content-Security-Policy': [csp],
       },
     })
   })
