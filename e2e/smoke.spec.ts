@@ -3,34 +3,32 @@ import { test, expect } from '@playwright/test'
 // Mock Electron APIs before any page script runs
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    // Mock window.ipcRenderer (used in main.tsx)
     Object.defineProperty(window, 'ipcRenderer', {
-      value: {
-        on: () => {},
-        send: () => {},
-        invoke: () => Promise.resolve(null),
-        removeAllListeners: () => {},
-      },
+      value: { on: () => {}, send: () => {}, invoke: () => Promise.resolve(null), removeAllListeners: () => {} },
       writable: true,
+      configurable: true,
     })
-
-    // Mock window.api (used in components via preload contextBridge)
     Object.defineProperty(window, 'api', {
       value: {
-        pickFolder: () => Promise.resolve({ path: '/tmp/test-vault' }),
-        setConfig: (data: Record<string, unknown>) => Promise.resolve(data),
-        getConfig: () => Promise.resolve({ rootFolder: null, theme: 'light' }),
-        readDir: () => Promise.resolve([]),
-        readFile: () => Promise.resolve(''),
-        writeFile: () => Promise.resolve({ ok: true }),
-        deleteFile: () => Promise.resolve({ ok: true }),
+        listDir: () => Promise.resolve([]),
+        readFile: () => Promise.resolve({ ok: false, content: null }),
+        writeFile: () => Promise.resolve({ ok: true, mtime: Date.now() }),
         renameFile: () => Promise.resolve({ ok: true }),
-        watchDir: () => Promise.resolve(),
-        unwatchDir: () => Promise.resolve(),
-        onFileChanged: () => {},
-        offFileChanged: () => {},
+        trashFile: () => Promise.resolve({ ok: true }),
+        pickFolder: () => Promise.resolve({ path: '/tmp/test-vault' }),
+        getConfig: () => Promise.resolve({ rootFolder: null, theme: 'light', version: 1, session: { openTabs: [], activeTab: null } }),
+        setConfig: (data: Record<string, unknown>) => Promise.resolve(data),
+        watchStart: () => Promise.resolve(),
+        openExternal: () => Promise.resolve(),
+        onTreeEntry: () => () => {},
+        onTreeChanged: () => () => {},
+        onFileChanged: () => () => {},
+        onFileDeleted: () => () => {},
+        onOpenFile: () => () => {},
+        onThemeChanged: () => () => {},
       },
       writable: true,
+      configurable: true,
     })
   })
 })
