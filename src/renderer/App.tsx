@@ -30,11 +30,16 @@ function App() {
 
   useEffect(() => {
     void (async () => {
-      const config = await window.api.getConfig() as { rootFolder?: string | null }
-      if (config.rootFolder) {
-        setRootFolder(config.rootFolder)
+      try {
+        const config = await window.api.getConfig() as { rootFolder?: string | null }
+        if (config.rootFolder) {
+          setRootFolder(config.rootFolder)
+        }
+      } catch (err) {
+        console.error('[App] getConfig failed:', err)
+      } finally {
+        setConfigLoaded(true)
       }
-      setConfigLoaded(true)
     })()
   }, [setRootFolder])
 

@@ -66,6 +66,10 @@ function createWindow(config: Config) {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
+  if (VITE_DEV_SERVER_URL) {
+    win.webContents.openDevTools()
+  }
+
   // Security: Block navigation and window.open
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
