@@ -36,6 +36,8 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           ? 'border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
           : 'border-transparent bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}
+      data-testid="tab-item"
+      data-active={String(isActive)}
       onClick={onActivate}
     >
       <span className="truncate flex-1">{tab.fileName}</span>
@@ -87,7 +89,7 @@ export function TabBar({ onTabClose }: TabBarProps) {
   void openFileWithCaps // used externally
 
   return (
-    <div className="flex items-stretch border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-x-auto flex-shrink-0">
+    <div data-testid="tab-bar" className="flex items-stretch border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-x-auto flex-shrink-0">
       {tabs.map(tab => (
         <TabItem
           key={tab.id}

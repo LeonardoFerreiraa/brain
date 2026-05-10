@@ -124,7 +124,7 @@ export function Canvas({ tab }: CanvasProps) {
   }
 
   return (
-    <div className="flex-1 h-full" ref={containerRef}>
+    <div data-testid="canvas-container" className="flex-1 h-full" ref={containerRef}>
       {ExcalidrawComponent ? (
         <ExcalidrawComponent
           initialData={{
