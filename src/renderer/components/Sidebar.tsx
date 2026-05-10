@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import type { Tab } from '../store/useAppStore'
 
 export interface TreeEntry {
   path: string
@@ -53,6 +54,8 @@ function isSupported(name: string): boolean {
 export function Sidebar() {
   const rootFolder = useAppStore((s) => s.rootFolder)
   const openFile = useAppStore((s) => s.openFile)
+  const tabs = useAppStore((s) => s.tabs)
+  const updateTabContent = useAppStore((s) => s.updateTabContent)
   const [entries, setEntries] = useState<TreeEntry[]>([])
   const [truncated, setTruncated] = useState(false)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
@@ -115,15 +118,23 @@ export function Sidebar() {
     openFile(entry.path, entry.name, type)
   }
 
-  const handleNewNote = async () => {
-    if (!rootFolder) return
-    let name = 'Untitled.md'
+  // BUG-12: check disk directly — entries state may be incomplete during scan
+  const findUniqueName = useCallback(async (base: string, ext: string): Promise<string> => {
+    if (!rootFolder) return base + ext
+    let name = base + ext
     let counter = 2
-    const existingNames = new Set(entries.filter((e) => e.depth === 0).map((e) => e.name))
-    while (existingNames.has(name)) {
-      name = `Untitled ${counter}.md`
+    while (true) {
+      const result = await window.api.readFile(rootFolder + '/' + name) as { ok: boolean }
+      if (!result.ok) break
+      name = `${base} ${counter}${ext}`
       counter++
     }
+    return name
+  }, [rootFolder])
+
+  const handleNewNote = async () => {
+    if (!rootFolder) return
+    const name = await findUniqueName('Untitled', '.md')
     const filePath = rootFolder + '/' + name
     await window.api.writeFile(filePath, '')
     openFile(filePath, name, 'markdown')
@@ -131,13 +142,7 @@ export function Sidebar() {
 
   const handleNewDrawing = async () => {
     if (!rootFolder) return
-    let name = 'Untitled.excalidraw'
-    let counter = 2
-    const existingNames = new Set(entries.filter((e) => e.depth === 0).map((e) => e.name))
-    while (existingNames.has(name)) {
-      name = `Untitled ${counter}.excalidraw`
-      counter++
-    }
+    const name = await findUniqueName('Untitled', '.excalidraw')
     const filePath = rootFolder + '/' + name
     const emptyExcalidraw = JSON.stringify({
       type: 'excalidraw',
@@ -162,8 +167,18 @@ export function Sidebar() {
     }
     const dir = entry.path.substring(0, entry.path.lastIndexOf('/'))
     const newPath = dir + '/' + renameValue
-    await window.api.renameFile(entry.path, newPath)
+    const result = await window.api.renameFile(entry.path, newPath) as { ok: boolean; newPath?: string }
     setRenamingPath(null)
+    // BUG-13: update filePath/fileName on any open tab that referenced the old path
+    if (result.ok) {
+      const resolvedNew = result.newPath ?? newPath
+      const newFileName = resolvedNew.split('/').pop() ?? renameValue
+      ;(tabs as Tab[]).forEach(tab => {
+        if (tab.filePath === entry.path) {
+          updateTabContent(tab.id, { filePath: resolvedNew, fileName: newFileName } as Partial<Tab>)
+        }
+      })
+    }
   }
 
   const handleTrash = async (entry: TreeEntry) => {
@@ -195,7 +210,6 @@ export function Sidebar() {
               autoFocus
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={() => handleRenameConfirm(entry)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleRenameConfirm(entry)
                 if (e.key === 'Escape') setRenamingPath(null)

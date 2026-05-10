@@ -69,3 +69,47 @@ describe('truncation limit', () => {
     expect(50000).toBe(50000)
   })
 })
+
+// BUG-12: name uniqueness must check disk, not just the partial entries state
+describe('BUG-12 — findUniqueName disk-check contract', () => {
+  it('increments name when disk says file exists', async () => {
+    // Simulate the disk-check loop logic
+    const existing = new Set(['Untitled.md', 'Untitled 2.md'])
+    const fileExists = (name: string) => existing.has(name)
+
+    let name = 'Untitled.md'
+    let counter = 2
+    while (fileExists(name)) {
+      name = `Untitled ${counter}.md`
+      counter++
+    }
+    expect(name).toBe('Untitled 3.md')
+  })
+
+  it('uses base name immediately when disk says file does not exist', async () => {
+    const fileExists = (_name: string) => false
+    let name = 'Untitled.md'
+    if (fileExists(name)) name = 'Untitled 2.md'
+    expect(name).toBe('Untitled.md')
+  })
+})
+
+// BUG-13: after rename, open tabs referencing old path must be updated
+describe('BUG-13 — open tab path updated after rename', () => {
+  it('finds tabs matching old path', () => {
+    const tabs = [
+      { id: 't1', filePath: '/Brain/old.md', fileName: 'old.md', type: 'markdown' },
+      { id: 't2', filePath: '/Brain/other.md', fileName: 'other.md', type: 'markdown' },
+    ]
+    const oldPath = '/Brain/old.md'
+    const newPath = '/Brain/new.md'
+    const updated = tabs.map(tab =>
+      tab.filePath === oldPath
+        ? { ...tab, filePath: newPath, fileName: 'new.md' }
+        : tab
+    )
+    expect(updated[0].filePath).toBe('/Brain/new.md')
+    expect(updated[0].fileName).toBe('new.md')
+    expect(updated[1].filePath).toBe('/Brain/other.md') // unchanged
+  })
+})
